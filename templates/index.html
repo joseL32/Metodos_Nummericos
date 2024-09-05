@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Métodos Numéricos</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Métodos Numéricos</h1>
+        <form id="method-form">
+            <div class="input-group">
+                <label for="method">Selecciona el método:</label>
+                <select id="method" name="method" onchange="updateForm()">
+                    <option value="" disabled selected>Selecciona un método</option>
+                    <option value="bisection">Método de Bisección</option>
+                    <option value="false_position">Método de Falsa Posición</option>
+                    <option value="secant">Método de Secante</option>
+                    <option value="newton_raphson">Método de Newton-Raphson</option>
+                </select>
+            </div>
+            <div id="function-group" class="input-group">
+                <label for="func">Ingrese la Función :</label>
+                <input type="text" id="func" name="func" placeholder="Ej: x**2 - 4" required>
+            </div>
+            <div id="params-group" class="params-group">
+                <!-- Parámetros específicos del método serán insertados aquí -->
+            </div>
+            <div class="input-group">
+                <label for="tol">Tolerancia:</label>
+                <input type="number" step="any" id="tol" name="tol" value="0.001" required>
+            </div>
+            <button type="button" onclick="submitForm()">Calcular</button>
+        </form>
+
+        <div id="result-container" class="result">
+            <h2></h2>
+            <p id="result-text"></p>
+            <div id="table-container" class="table-container" style="display: none;">
+                <h2>Tabla de Iteraciones:</h2>
+                <table id="result-table">
+                    <thead>
+                        <tr id="table-header">
+                            <!-- Cabeceras de tabla se insertarán aquí -->
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Filas de tabla se insertarán aquí -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="chart-container" class="chart-container" style="display: none;">
+                <h2>Gráfico de Iteraciones:</h2>
+                <canvas id="result-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateForm() {
+            const method = document.getElementById('method').value;
+            const paramsGroup = document.getElementById('params-group');
+
+            // Limpiar parámetros del formulario
+            paramsGroup.innerHTML = '';
+
+            // Añadir parámetros específicos del método seleccionado
+            if (method === 'bisection' || method === 'false_position') {
+                paramsGroup.innerHTML += `
+                    <div class="input-group">
+                        <label for="a">Límite inferior:</label>
+                        <input type="number" step="any" id="a" name="a">
+                    </div>
+                    <div class="input-group">
+                        <label for="b">Límite superior:</label>
+                        <input type="number" step="any" id="b" name="b">
+                    </div>
+                `;
+            }
+            if (method === 'secant') {
+                paramsGroup.innerHTML += `
+                    <div class="input-group">
+                        <label for="x0">Valor inicial x0:</label>
+                        <input type="number" step="any" id="x0" name="x0">
+                    </div>
+                    <div class="input-group">
+                        <label for="x1">Valor inicial x1:</label>
+                        <input type="number" step="any" id="x1" name="x1">
+                    </div>
+                `;
+            }
+            if (method === 'newton_raphson') {
+                paramsGroup.innerHTML += `
+                    <div class="input-group">
+                        <label for="x0">Valor inicial x0:</label>
+                        <input type="number" step="any" id="x0" name="x0">
+                    </div>
+                `;
+            }
+        }
+
+        function submitForm() {
+            const formData = new FormData(document.getElementById('method-form'));
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = value;
+            });
+
+            fetch('/calculate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('result-text').innerText = `La raíz aproximada es: ${data.result}`;
+                const tableContainer = document.getElementById('table-container');
+                const tableBody = document.getElementById('table-body');
+                const tableHeader = document.getElementById('table-header');
+                const chartContainer = document.getElementById('chart-container');
+                const ctx = document.getElementById('result-chart').getContext('2d');
+
+                // Limpiar tabla
+                tableBody.innerHTML = '';
+                tableHeader.innerHTML = '';
+
+                if (data.iterations.length > 0) {
+                    const headers = Object.keys(data.iterations[0]);
+                    headers.forEach(header => {
+                        const th = document.createElement('th');
+                        th.innerText = header;
+                        tableHeader.appendChild(th);
+                    });
+
+                    data.iterations.forEach(row => {
+                        const tr = document.createElement('tr');
+                        headers.forEach(header => {
+                            const td = document.createElement('td');
+                            td.innerText = row[header];
+                            tr.appendChild(td);
+                        });
+                        tableBody.appendChild(tr);
+                    });
+
+                    tableContainer.style.display = 'block';
+
+                    // Crear gráfico
+                    const labels = data.iterations.map((_, index) => `Iteración ${index + 1}`);
+                    const datasets = headers.map(header => ({
+                        label: header,
+                        data: data.iterations.map(row => row[header]),
+                        borderColor: getRandomColor(),
+                        fill: false
+                    }));
+
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: datasets
+                        },
+                        options: {
+                            scales: {
+                                x: { beginAtZero: true },
+                                y: { beginAtZero: true }
+                            }
+                        }
+                    });
+
+                    chartContainer.style.display = 'block';
+                } else {
+                    tableContainer.style.display = 'none';
+                    chartContainer.style.display = 'none';
+                }
+            });
+        }
+
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+    </script>
+</body>
+</html>
